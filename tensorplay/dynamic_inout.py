@@ -3,12 +3,15 @@ import numpy as np
 tf.logging.set_verbosity(tf.logging.DEBUG)
 
 MODEL_DIR = '/tmp/dynamic_inout'
-NUM_SAMPLE = 10000000
-BATCH_SIZE = 100000
+TRAIN_NUM_SAMPLE = 100000
+VAL_NUM_SAMPLE = 10000
+TEST_NUM_SAMPLE = 20000
+BATCH_SIZE = 100
 NUM_INPUT = 3
 NUM_OUTPUT = 2
 INPUT_DIMS = np.random.randint(low=5, high=10, size=NUM_INPUT)
 OUTPUT_CLASSES = np.random.randint(low=3, high=8, size=NUM_OUTPUT)
+
 
 def rand_data_generator(num_sample, num_input, num_output, input_dims, output_classes):
     x, y = dict(), dict()
@@ -111,7 +114,7 @@ def model_fn(features, labels, mode, params):
         predictions['logits_{0}'.format(k)] = logits[i]
         eval_metric_ops['accuracy_{0}'.format(k)] = tf.metrics.accuracy(v, predicted_label)
         eval_metric_ops['precision_{0}'.format(k)] = tf.metrics.precision(v, predicted_label)
-        eval_metric_ops['recall_{0}'] = tf.metrics.recall(v, predicted_label)
+        eval_metric_ops['recall_{0}'.format(k)] = tf.metrics.recall(v, predicted_label)
 
     total_loss = tf.losses.get_total_loss(add_regularization_losses=True)
     tf.summary.scalar('training_total_loss', total_loss)
@@ -119,7 +122,7 @@ def model_fn(features, labels, mode, params):
     optimizer = tf.train.AdamOptimizer(learning_rate=0.001)
     train_op = optimizer.minimize(total_loss, global_step=global_step)
 
-    print([x.name for x in tf.global_variables()])
+    # print([x.name for x in tf.global_variables()])
 
     return tf.contrib.learn.ModelFnOps(
         mode=mode,
@@ -128,6 +131,22 @@ def model_fn(features, labels, mode, params):
         train_op=train_op,
         eval_metric_ops=eval_metric_ops)
 
+# Training Set
+train_d = rand_data_generator(TRAIN_NUM_SAMPLE, NUM_INPUT, NUM_OUTPUT, INPUT_DIMS, OUTPUT_CLASSES)
+train_ds = Dataset(train_d, BATCH_SIZE, NUM_INPUT, NUM_OUTPUT, INPUT_DIMS, OUTPUT_CLASSES)
+# Validation Set
+val_d = rand_data_generator(VAL_NUM_SAMPLE, NUM_INPUT, NUM_OUTPUT, INPUT_DIMS, OUTPUT_CLASSES)
+val_ds = Dataset(val_d, BATCH_SIZE, NUM_INPUT, NUM_OUTPUT, INPUT_DIMS, OUTPUT_CLASSES)
+# Test Set
+test_d = rand_data_generator(TEST_NUM_SAMPLE, NUM_INPUT, NUM_OUTPUT, INPUT_DIMS, OUTPUT_CLASSES)
+test_ds = Dataset(test_d, BATCH_SIZE, NUM_INPUT, NUM_OUTPUT, INPUT_DIMS, OUTPUT_CLASSES)
+
+validation_monitor = tf.contrib.learn.monitors.ValidationMonitor(
+        input_fn=val_ds.input_fn,
+        every_n_steps=50,
+        early_stopping_metric="loss",
+        early_stopping_metric_minimize=True,
+        early_stopping_rounds=200)
         
 estimator = tf.contrib.learn.Estimator(
     model_fn = model_fn,
@@ -140,6 +159,6 @@ estimator = tf.contrib.learn.Estimator(
     params={'output_classes': OUTPUT_CLASSES}
 )
 
-d = rand_data_generator(NUM_SAMPLE, NUM_INPUT, NUM_OUTPUT, INPUT_DIMS, OUTPUT_CLASSES)
-ds = Dataset(d, BATCH_SIZE, NUM_INPUT, NUM_OUTPUT, INPUT_DIMS, OUTPUT_CLASSES)
-estimator.fit(input_fn=ds.input_fn)
+estimator.fit(input_fn=train_ds.input_fn, monitors=[validation_monitor])
+
+estimator.evaluate(input_fn=test_ds.input_fn)
