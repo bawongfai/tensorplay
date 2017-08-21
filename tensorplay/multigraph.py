@@ -4,8 +4,8 @@ os.environ['TF_CPP_MIN_LOG_LEVEL'] = '3'
 
 import numpy as np
 import tensorflow as tf
-from .log_util import configure_logger, suppress_stdout
-from .tools.freeze_graph import freeze_graph
+from tensorplay.log_util import configure_logger, suppress_stdout
+from tensorplay.tools.freeze_graph import freeze_graph
 
 logger = logging.getLogger("tensorplay.multigraph")
 
